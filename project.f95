@@ -5,13 +5,13 @@ program project
         integer, dimension(:), allocatable :: saw_length
         integer                            :: i, j, k, l, m, nmc, n_saw, counter
         real, dimension(:,:), allocatable  :: pos
-        real                               :: rand, start, finish, avg
+        real                               :: rand, start, finish, avg_chains, distance, r_squared, mseted
 
-        call cpu_time(start)
+        
         call init_random_seed()
 
-        n_saw = 50
-        nmc = 100000
+        n_saw = 96
+        nmc = 1000
 
         allocate(saw_length(n_saw))
         allocate(pos(n_saw+3,3))
@@ -21,8 +21,12 @@ program project
                 saw_length(i) = saw_length(i-1) + 1        
         end do
 
+        write(*,'(A11,A14,A20,A10)') "SAW length ", "Avg # SAW's ", "Mean square displacement ", "time"
+
         do i = 1, n_saw
-                avg = 0
+                avg_chains = 0
+                mseted = 0
+                call cpu_time(start)
                 do j = 1, nmc
                         k = 2
                         pos(:,:) = 0
@@ -56,13 +60,15 @@ program project
                                 end do
                                 k = k + 1
                         end do
-                        avg = avg + counter
-                        !do l = 1, saw_length(i)
-                        !        print*, pos(l,:), i, j
-                        !end do 
+                        avg_chains = avg_chains + counter
+                        distance = sqrt(pos(saw_length(i),1) ** 2 + pos(saw_length(i),2) ** 2 + pos(saw_length(i),3) ** 2)
+                        r_squared = distance ** 2
+                        mseted = mseted + r_squared
                 end do
-                avg = avg / nmc
-                print*, avg        
+                avg_chains = avg_chains / nmc
+                mseted = mseted / nmc
+                call cpu_time(finish)
+                print*, saw_length(i),  avg_chains, mseted, finish - start        
         end do
  
 contains
