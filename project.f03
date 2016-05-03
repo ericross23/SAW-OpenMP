@@ -3,16 +3,14 @@ program project
         implicit none
         
         character(len=3)                   :: saw_length_arg, num_threads_arg
-        integer                            :: seed
-        common /RAND/ SEED
-        integer                            :: NUM_THREADS
-        
-        !$omp threadprivate(/RAND/)
         integer, parameter                 :: nmc = 10000
-        integer                            :: j, k, l, m, saw_length
+        integer                            :: i, j, k, l, m, saw_length, NUM_THREADS, seed
         real, dimension(:,:), allocatable  :: pos
         double precision                   :: rand, start, finish, distance, r_squared, mseted, time                    
+        common /RAND/ SEED
         
+        !$omp threadprivate(/RAND/)
+         
         start = omp_get_wtime()
 
         ! Command line arguments that specify the length of the SAW
@@ -21,20 +19,24 @@ program project
         call get_command_argument(2, num_threads_arg)
         read (saw_length_arg, *) saw_length
         read (num_threads_arg, *) NUM_THREADS
+        allocate(pos(saw_length,3))
 
-        print*, NUM_THREADS
+        open(20,file="position.stdout")
+
+        print*, "Number of threads: ", NUM_THREADS
+
         ! Initial seed value for PRNG
         seed = 1
 
-        allocate(pos(saw_length,3))
-
         mseted = 0
+
         !$omp parallel num_threads(NUM_THREADS)
         seed = omp_get_thread_num() + 1
         !$omp do schedule(dynamic), private(distance,r_squared,pos,rand), reduction(+:mseted)  
         do j = 1, nmc
                 pos(:,:) = 0
                 10 do k = 2, saw_length
+                        ! Add a point in a random direction to the existing walk
                         rand = get_randnum()
                         if (0 <= rand .and. rand < (1./6)) then
                                 pos(k,:) = pos(k-1,:) + (/ 1, 0, 0 /)        
@@ -50,6 +52,8 @@ program project
                                 pos(k,:) = pos(k-1,:) + (/ 0, 0, -1 /)
                         end if
 
+                        ! Check to see if the new point overlaps with an
+                        ! existing point
                         do l = 1, k
                                 do m = l + 1, k
                                         if (abs(pos(l,1) - pos(m,1)) < 1 .and. abs(pos(l,2) - pos(m,2)) < 1 &
@@ -59,21 +63,41 @@ program project
                                 end do
                         end do
                 end do
+
+                ! Sample SAW position for visualization
+                if (j == nmc / 2) then
+                    do i = 1, saw_length
+                        write(20,*) pos(i,:)
+                    end do
+                end if
+
+                ! Calculate the end to end distance, square it, and add to the
+                ! running average
                 distance = sqrt(pos(saw_length,1) ** 2 + pos(saw_length,2) ** 2 + pos(saw_length,3) ** 2)
                 r_squared = distance ** 2
                 mseted = mseted + r_squared
         end do
         !$omp end do
         !$omp end parallel
+
+        ! Finish calculating the mean squared end to end distance
         mseted = mseted / nmc
 
+        ! Calculate the total time
         finish = omp_get_wtime()
-
         time = finish - start
 
         print*, "SAW Length: ", saw_length, "Mean squared displacement: ", mseted, "Total time: ", time
-        
+
         contains
+
+!--------------------------------------------------------------------------------------------------------------------
+!
+!
+!                                         Parallel Random Number Generator
+!
+!
+!--------------------------------------------------------------------------------------------------------------------
 
         double precision function get_randnum() result(randnum)
             integer :: seed
